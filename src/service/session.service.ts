@@ -1,8 +1,9 @@
-import { Omit } from "lodash";
-import { LeanDocument } from "mongoose";
+import { Omit, get } from "lodash";
+import { FilterQuery, LeanDocument, UpdateQuery } from "mongoose";
 import config from "config";
 import Session, { SessionDocument } from "../model/session.model";
-import { sign } from "../utils/jwt.utils";
+import { decode, sign } from "../utils/jwt.utils";
+import { findUser } from "./user.service";
 
 export async function createSession(userId: string, userAgent: string) {
   const session = await Session.create({ user: userId, userAgent });
@@ -30,4 +31,32 @@ export function createAccessToken({
   );
 
   return accessToken;
+}
+
+export async function reIssueAccessToken({
+  refreshToken,
+}: {
+  refreshToken: string;
+}) {
+  const { decoded } = decode(refreshToken);
+  if (!decoded || !get(decoded, "_id")) return false;
+
+  const session = await Session.findById(get(decoded, "_id"));
+
+  if (!session || !session?.valid) return false;
+
+  const user = await findUser({ id: session.user });
+
+  if (!user) return false;
+
+  const accessToken = createAccessToken({ user, session });
+
+  return accessToken;
+}
+
+export async function updateSession(
+  query: FilterQuery<SessionDocument>,
+  update: UpdateQuery<SessionDocument>
+) {
+  return Session.updateOne(query, update);
 }
